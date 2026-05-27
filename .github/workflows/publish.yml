@@ -1,14 +1,13 @@
-name: "Publish Tauri App"
+name: "Auto Publish Tauri App"
 
-# 触发条件：手动触发 或 推送到 release 分支
+#  触发条件：推送 Tag 时自动执行（如 v1.0.0, v0.2.1）
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - release
+    tags:
+      - "v*"
+  workflow_dispatch: # 保留手动触发备用
 
-#  关键修复：并发控制
-# 防止同时运行多次导致创建多个 Draft
+# 防止并发冲突
 concurrency:
   group: "publish-${{ github.ref }}"
   cancel-in-progress: false
@@ -22,51 +21,40 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # 1. Windows 构建
           - platform: "windows-latest"
             args: ""
-          # 2. macOS ARM (M1/M2/M3) - 使用最新版 runner (默认 ARM)
-          - platform: "macos-latest"
+          - platform: "macos-latest" # Apple Silicon (M1/M2/M3)
             args: ""
-          # 3. macOS Intel (x86_64) - 使用 macos-13 (Intel 架构 runner)
-          # 这是官方推荐做法，避免交叉编译问题
-          - platform: "macos-13"
+          - platform: "macos-13" # Intel 芯片
             args: ""
 
     runs-on: ${{ matrix.platform }}
 
     steps:
-      # 1. 检出代码
-      - name: 📥 Checkout repository
+      - name: 📥 Checkout
         uses: actions/checkout@v4
 
-      # 2. 设置 Node.js
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
           cache: "npm"
 
-      # 3. 设置 Rust
-      - name: 🦀 Setup Rust stable
+      - name: 🦀 Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      # 4. Rust 缓存 (加速构建)
       - name: 🗃️ Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
 
-      # 5. 安装前端依赖
-      - name: 📦 Install frontend dependencies
+      - name: 📦 Install deps
         run: npm ci
 
-      # 6. 构建前端 (Vite)
       - name: 🔨 Build frontend
         run: npm run build
 
-      # 7. 构建 Tauri 应用并发布
-      - name: Build & Publish Tauri App
+      - name: Build & Auto Publish
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -74,14 +62,14 @@ jobs:
           tagName: app-v__VERSION__
           releaseName: "Release v__VERSION__"
           releaseBody: |
-            🎉 **Tauri + Vue App**
+            🎉 自动构建发布 | Auto Build & Publish
 
-            **📦 包含以下安装包：**
+            **📦 安装包列表**
             - 🪟 Windows: `setup.exe` / `.msi`
-            -  macOS (Apple Silicon): `.dmg`
+            - 🍎 macOS (Apple Silicon): `.dmg`
             - 🍎 macOS (Intel): `.dmg`
 
-            > 提示：macOS 用户如果提示“已损坏”，请终端执行 `xattr -cr /Applications/YourApp.app`
-          releaseDraft: true # 🔥 保持为草稿，确认无误后手动发布
+            > 💡 macOS 提示“已损坏”？终端执行：`xattr -cr /Applications/Hello\ Word.app`
+          releaseDraft: false # 🔥 关键：自动直接发布，不存草稿
           prerelease: false
           args: ${{ matrix.args }}
