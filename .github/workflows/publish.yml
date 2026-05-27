@@ -1,11 +1,11 @@
 # .github/workflows/publish.yml
-name: 'Publish Tauri App'
+name: "Publish Tauri App"
 
 on:
   push:
     branches:
-      - release          # 推送到 release 分支时自动触发
-  workflow_dispatch:     # 支持手动点击触发（测试推荐）
+      - release # 推送到 release 分支时自动触发
+  workflow_dispatch: # 支持手动点击触发（测试推荐）
 
 jobs:
   publish-tauri:
@@ -17,14 +17,14 @@ jobs:
       matrix:
         include:
           # Windows x64 → 生成 .exe / .msi
-          - platform: 'windows-latest'
-            target: ''
+          - platform: "windows-latest"
+            target: ""
           # macOS Intel → 生成 .dmg
-          - platform: 'macos-latest'
-            target: 'x86_64-apple-darwin'
+          - platform: "macos-latest"
+            target: "x86_64-apple-darwin"
           # macOS Apple Silicon (M1/M2/M3)
-          - platform: 'macos-latest'
-            target: 'aarch64-apple-darwin'
+          - platform: "macos-latest"
+            target: "aarch64-apple-darwin"
 
     runs-on: ${{ matrix.platform }}
 
@@ -36,7 +36,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
-          cache: 'npm'  # 你用的是 npm
+          cache: "npm" # 你用的是 npm
 
       - name: 🦀 Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -46,22 +46,22 @@ jobs:
       - name: 🗃️ Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: './src-tauri -> target'
+          workspaces: "./src-tauri -> target"
 
       - name: 📦 Install frontend deps
-        run: npm ci  # 比 npm install 更快更稳定
+        run: npm ci # 比 npm install 更快更稳定
 
       - name: 🔨 Build frontend
         run: npm run build
 
       - name: 🚀 Build Tauri app & Publish
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: app-v__VERSION__
-          releaseName: 'Hello Word v__VERSION__'
-          releaseBody: '🎉 新版本发布！支持 Windows & macOS'
-          releaseDraft: true    # ✅ 先创建为草稿，确认后再发布
+          releaseName: "Hello Word v__VERSION__"
+          releaseBody: "🎉 新版本发布！支持 Windows & macOS"
+          releaseDraft: true # ✅ 先创建为草稿，确认后再发布
           prerelease: false
           args: ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
