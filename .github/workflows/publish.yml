@@ -1,11 +1,17 @@
-# .github/workflows/publish.yml
 name: "Publish Tauri App"
 
+# 触发条件：手动触发 或 推送到 release 分支
 on:
+  workflow_dispatch:
   push:
     branches:
-      - release # 推送到 release 分支时自动触发
-  workflow_dispatch: # 支持手动点击触发（测试推荐）
+      - release
+
+#  关键修复：并发控制
+# 防止同时运行多次导致创建多个 Draft
+concurrency:
+  group: "publish-${{ github.ref }}"
+  cancel-in-progress: false
 
 jobs:
   publish-tauri:
@@ -16,52 +22,66 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Windows x64 → 生成 .exe / .msi
+          # 1. Windows 构建
           - platform: "windows-latest"
-            target: ""
-          # macOS Intel → 生成 .dmg
+            args: ""
+          # 2. macOS ARM (M1/M2/M3) - 使用最新版 runner (默认 ARM)
           - platform: "macos-latest"
-            target: "x86_64-apple-darwin"
-          # macOS Apple Silicon (M1/M2/M3)
-          - platform: "macos-latest"
-            target: "aarch64-apple-darwin"
+            args: ""
+          # 3. macOS Intel (x86_64) - 使用 macos-13 (Intel 架构 runner)
+          # 这是官方推荐做法，避免交叉编译问题
+          - platform: "macos-13"
+            args: ""
 
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - name: 📥 Checkout code
+      # 1. 检出代码
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
+      # 2. 设置 Node.js
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
-          cache: "npm" # 你用的是 npm
+          cache: "npm"
 
-      - name: 🦀 Setup Rust
+      # 3. 设置 Rust
+      - name: 🦀 Setup Rust stable
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
+      # 4. Rust 缓存 (加速构建)
       - name: 🗃️ Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
 
-      - name: 📦 Install frontend deps
-        run: npm ci # 比 npm install 更快更稳定
+      # 5. 安装前端依赖
+      - name: 📦 Install frontend dependencies
+        run: npm ci
 
+      # 6. 构建前端 (Vite)
       - name: 🔨 Build frontend
         run: npm run build
 
-      - name: 🚀 Build Tauri app & Publish
+      # 7. 构建 Tauri 应用并发布
+      - name: Build & Publish Tauri App
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: app-v__VERSION__
-          releaseName: "Hello Word v__VERSION__"
-          releaseBody: "🎉 新版本发布！支持 Windows & macOS"
-          releaseDraft: true # ✅ 先创建为草稿，确认后再发布
+          releaseName: "Release v__VERSION__"
+          releaseBody: |
+            🎉 **Tauri + Vue App**
+
+            **📦 包含以下安装包：**
+            - 🪟 Windows: `setup.exe` / `.msi`
+            -  macOS (Apple Silicon): `.dmg`
+            - 🍎 macOS (Intel): `.dmg`
+
+            > 提示：macOS 用户如果提示“已损坏”，请终端执行 `xattr -cr /Applications/YourApp.app`
+          releaseDraft: true # 🔥 保持为草稿，确认无误后手动发布
           prerelease: false
-          args: ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+          args: ${{ matrix.args }}
